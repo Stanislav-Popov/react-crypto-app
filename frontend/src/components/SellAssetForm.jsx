@@ -1,13 +1,12 @@
 /** @format */
-import { Select, Space, Form, Divider, InputNumber, Button, DatePicker, Result } from "antd"
+import { Form, Divider, InputNumber, Button, DatePicker, Result } from "antd"
 import { useRef, useState } from "react"
 import { useCrypto } from "../context/crypto-context"
 import CoinInfo from "./CoinInfo"
 
-export default function AddAssetForm({ onClose }) {
+export default function AddAssetForm({ onClose, coin, icon }) {
     const [form] = Form.useForm()
-    const { crypto, addAsset } = useCrypto()
-    const [coin, setCoin] = useState(null)
+    const { sellAsset } = useCrypto()
     const [submitted, setSubmitted] = useState(false)
     const assetRef = useRef()
 
@@ -36,36 +35,15 @@ export default function AddAssetForm({ onClose }) {
         )
     }
 
-    if (!coin) {
-        return (
-            <Select
-                style={{ width: "100%" }}
-                placeholder="Select coin"
-                onSelect={(v) => setCoin(crypto.find((c) => c.id === v))}
-                options={crypto.map((coin) => ({
-                    label: coin.name,
-                    value: coin.id,
-                    icon: coin.icon,
-                }))}
-                optionRender={(option) => (
-                    <Space>
-                        <img style={{ width: 20 }} src={option.data.icon} alt={option.data.label} />
-                        {option.data.label}
-                    </Space>
-                )}
-            />
-        )
-    }
-
     function onFinish(values) {
-        const newAsset = {
+        const soldAsset = {
             id: coin.id,
             amount: values.amount,
             price: values.price,
             date: values.date?.$d ?? new Date(),
         }
-        assetRef.current = newAsset
-        addAsset(newAsset)
+        assetRef.current = soldAsset
+        sellAsset(soldAsset)
         setSubmitted(true)
     }
 
@@ -89,7 +67,11 @@ export default function AddAssetForm({ onClose }) {
             labelCol={{ span: 4 }}
             wrapperCol={{ span: 10 }}
             style={{ maxWidth: 600 }}
-            initialValues={{ price: +coin.price.toFixed(2) }}
+            initialValues={{
+                price: +coin.currentPrice.toFixed(2),
+                amount: +coin.amount,
+                total: (+coin.currentPrice * +coin.amount).toFixed(2),
+            }}
             onFinish={onFinish}
             validateMessages={validateMessages}>
             <CoinInfo coin={coin} />
@@ -105,6 +87,7 @@ export default function AddAssetForm({ onClose }) {
                     },
                 ]}>
                 <InputNumber
+                    max={+coin.amount}
                     min={0}
                     placeholder="Input coin amount"
                     onChange={handleAmountChange}
@@ -134,7 +117,7 @@ export default function AddAssetForm({ onClose }) {
 
             <Form.Item>
                 <Button type="primary" htmlType="submit">
-                    Add Asset
+                    Sell Asset
                 </Button>
             </Form.Item>
         </Form>

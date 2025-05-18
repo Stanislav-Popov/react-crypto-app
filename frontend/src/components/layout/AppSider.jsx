@@ -1,21 +1,71 @@
 /** @format */
-import { Layout, Card, Statistic, List, Typography, Tag } from "antd"
-import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons"
+import { Layout, Card, Statistic, List, Typography, Tag, Tooltip, Modal, Drawer } from "antd"
+import {
+    ArrowDownOutlined,
+    ArrowUpOutlined,
+    InfoCircleOutlined,
+    PlusCircleOutlined,
+    MinusCircleOutlined,
+} from "@ant-design/icons"
 import { capitalize } from "../../utils"
-import { useContext } from "react"
+import { useContext, useState } from "react"
+import CoinInfoModal from "../CoinInfoModal"
 import CryptoContext from "../../context/crypto-context"
+import ActionButton from "../ActionButton"
+import SellAssetForm from "../SellAssetForm"
 
 const siderStyle = {
     padding: "1rem",
 }
 
 export default function AppSider() {
-    const { assets } = useContext(CryptoContext)
+    const { assets, crypto } = useContext(CryptoContext)
+
+    const [modalOpen, setModalOpen] = useState(false)
+    const [drawerOpen, setDrawer] = useState(false)
+    const [selectedCoin, setSelectedCoin] = useState(null)
+    const [selectedAsset, setSelectedAsset] = useState(null)
+
+    function handleInfoClick(assetId) {
+        const coin = crypto.find((c) => c.id === assetId)
+        setSelectedCoin(coin)
+        setModalOpen(true)
+    }
+
+    function handleSellClick(assetId) {
+        const coin = crypto.find((c) => c.id === assetId)
+        const icon = coin.icon
+        const currentPrice = coin.price
+        const asset = {
+            ...assets.find((a) => a.id === assetId),
+            icon,
+            currentPrice,
+        }
+        setSelectedAsset(asset)
+        setDrawer(true)
+    }
+
+    const actions = (assetId) => [
+        <ActionButton
+            key="sell"
+            title="Sell asset"
+            icon={MinusCircleOutlined}
+            label="Sell"
+            onClick={() => handleSellClick(assetId)}
+        />,
+        <ActionButton
+            key="info"
+            title="Asset Information"
+            icon={InfoCircleOutlined}
+            label="Info"
+            onClick={() => handleInfoClick(assetId)}
+        />,
+    ]
 
     return (
         <Layout.Sider width="25%" style={siderStyle}>
             {assets.map((asset) => (
-                <Card key={asset.id} style={{ marginBottom: "1rem" }}>
+                <Card key={asset.id} style={{ marginBottom: "1rem" }} actions={actions(asset.id)}>
                     <Statistic
                         title={capitalize(asset.id)}
                         value={asset.totalAmount}
@@ -29,7 +79,6 @@ export default function AppSider() {
                         dataSource={[
                             { title: "Total Profit", value: asset.totalProfit, withTag: true },
                             { title: "Asset Amount", value: asset.amount, isPlain: true },
-                            // { title: "Difference", value: asset.growPercent },
                         ]}
                         renderItem={(item) => (
                             <List.Item>
@@ -50,16 +99,19 @@ export default function AppSider() {
                     />
                 </Card>
             ))}
-            {/* <Card>
-                <Statistic
-                    title="Idle"
-                    value={9.3}
-                    precision={2}
-                    valueStyle={{ color: "#cf1322" }}
-                    prefix={<ArrowDownOutlined />}
-                    suffix="%"
-                />
-            </Card> */}
+
+            <Modal title="Coin Info" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
+                {selectedCoin && <CoinInfoModal coin={selectedCoin} />}
+            </Modal>
+
+            <Drawer
+                destroyOnClose
+                width={600}
+                title="Sell Asset"
+                onClose={() => setDrawer(false)}
+                open={drawerOpen}>
+                <SellAssetForm onClose={() => setDrawer(false)} coin={selectedAsset} />
+            </Drawer>
         </Layout.Sider>
     )
 }
