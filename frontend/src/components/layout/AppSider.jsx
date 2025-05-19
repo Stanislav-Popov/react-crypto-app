@@ -1,10 +1,9 @@
 /** @format */
-import { Layout, Card, Statistic, List, Typography, Tag, Tooltip, Modal, Drawer } from "antd"
+import { Layout, Card, Statistic, List, Typography, Tag, Modal, Drawer } from "antd"
 import {
     ArrowDownOutlined,
     ArrowUpOutlined,
     InfoCircleOutlined,
-    PlusCircleOutlined,
     MinusCircleOutlined,
 } from "@ant-design/icons"
 import { capitalize } from "../../utils"

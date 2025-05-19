@@ -3,6 +3,7 @@
 import { createContext, useState, useEffect, useContext } from "react"
 import { fetchAssets, fakeFetchCrypto } from "../api"
 import { percentDifference } from "../utils"
+import { message } from "antd"
 
 const CryptoContext = createContext({
     assets: [],
@@ -13,34 +14,70 @@ const CryptoContext = createContext({
 export function CryptoContextProvider({ children }) {
     const [loading, setLoading] = useState(false)
     const [crypto, setCrypto] = useState([])
-    const [assets, setAssets] = useState([])
+    const [assets, setAssets] = useState(() => {
+        const saved = localStorage.getItem("myCryptoAssets")
+        return saved ? JSON.parse(saved) : []
+    })
 
     function mapAssets(assets, result) {
         return assets.map((asset) => {
             const coin = result.find((c) => c.id === asset.id)
+            // То, что осталось «на бумаге» по текущему курсу
+            const unrealizedProfit = asset.amount * coin.price - asset.amount * asset.price
+            // Хранит сумму прибыли, которую ты уже получил при прошлых продажах
+            const realizedProfit = asset.realizedProfit || 0
+
             return {
                 ...asset,
                 grow: asset.price < coin.price,
                 growPercent: percentDifference(asset.price, coin.price),
                 totalAmount: asset.amount * coin.price,
-                totalProfit: asset.amount * coin.price - asset.amount * asset.price,
+                totalProfit: realizedProfit + unrealizedProfit,
+                realizedProfit,
+                unrealizedProfit,
                 name: coin.name,
             }
         })
     }
 
     useEffect(() => {
+        localStorage.setItem("myCryptoAssets", JSON.stringify(assets))
+    }, [assets])
+
+    useEffect(() => {
         async function preload() {
             setLoading(true)
-            const { result } = await fakeFetchCrypto()
-            const assets = await fetchAssets()
 
-            setAssets(mapAssets(assets, result))
+            // 3) Сначала получаем курсы
+            const { result } = await fakeFetchCrypto()
             setCrypto(result)
+
+            // 4) Если портфель из localStorage пустой — грузим дефолт и мапим
+            if (assets.length === 0) {
+                const defaultAssets = await fetchAssets()
+                setAssets(mapAssets(defaultAssets, result))
+            } else {
+                // 5) Если портфель есть в localStorage — просто обновляем цены для него
+                setAssets((prev) => mapAssets(prev, result))
+            }
+
             setLoading(false)
         }
         preload()
     }, [])
+
+    // useEffect(() => {
+    //     async function preload() {
+    //         setLoading(true)
+    //         const { result } = await fakeFetchCrypto()
+    //         const assets = await fetchAssets()
+
+    //         setAssets(mapAssets(assets, result))
+    //         setCrypto(result)
+    //         setLoading(false)
+    //     }
+    //     preload()
+    // }, [])
 
     // Добавить актив в портфель
     function addAsset(newAsset) {
@@ -84,15 +121,18 @@ export function CryptoContextProvider({ children }) {
                 return
             }
 
+            // Реализованная прибыль по этой продаже
+            const realized = soldAsset.amount * (soldAsset.price - existing.price)
             const newAmount = existing.amount - soldAsset.amount
-            
+
             let newAssets
             if (newAmount === 0) {
                 newAssets = prev.filter((_, i) => i !== assetIndex)
             } else {
                 const updated = {
                     ...existing,
-                    amount: newAmount
+                    amount: newAmount,
+                    realizedProfit: (existing.realizedProfit || 0) + realized,
                 }
                 newAssets = [...prev]
                 newAssets[assetIndex] = updated
@@ -102,8 +142,26 @@ export function CryptoContextProvider({ children }) {
         })
     }
 
+    function uploadAssets(file) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            const text = e.target.result
+            try {
+                const json = JSON.parse(text)
+                // валидация…
+                setAssets(mapAssets(json, crypto))
+                message.success("Данные загружены из файла")
+            } catch (err) {
+                console.error("❌ JSON.parse error:", err)
+                message.error("Ошибка чтения JSON-файла: " + err.message)
+            }
+        }
+        reader.readAsText(file)
+        return false
+    }
+
     return (
-        <CryptoContext.Provider value={{ loading, crypto, assets, addAsset, sellAsset }}>
+        <CryptoContext.Provider value={{ loading, crypto, assets, uploadAssets, addAsset, sellAsset }}>
             {children}
         </CryptoContext.Provider>
     )
