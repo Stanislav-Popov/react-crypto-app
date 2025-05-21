@@ -1,174 +1,75 @@
 /** @format */
 
-import { createContext, useState, useEffect, useContext } from "react"
-import { fetchAssets, fakeFetchCrypto } from "../api"
-import { percentDifference } from "../utils"
-import { message } from "antd"
+import { createContext, useState, useEffect, useContext } from 'react';
+import { fetchAssets, fakeFetchCrypto } from '../api';
+import { message } from 'antd';
+import { AssetsRepository } from '../utils/repositories/AssetsRepository';
+import { AssetService } from '../utils/services/AssetService';
 
 const CryptoContext = createContext({
     assets: [],
     crypto: [],
     loading: false,
-})
+    addAsset: () => {},
+    sellAsset: () => {},
+    uploadAssets: () => {},
+});
+
+export function useCrypto() {
+    return useContext(CryptoContext);
+}
+
+const repository = new AssetsRepository();
+const service = new AssetService(repository);
 
 export function CryptoContextProvider({ children }) {
-    const [loading, setLoading] = useState(false)
-    const [crypto, setCrypto] = useState([])
-    const [assets, setAssets] = useState(() => {
-        const saved = localStorage.getItem("myCryptoAssets")
-        return saved ? JSON.parse(saved) : []
-    })
-
-    function mapAssets(assets, result) {
-        return assets.map((asset) => {
-            const coin = result.find((c) => c.id === asset.id)
-            // То, что осталось «на бумаге» по текущему курсу
-            const unrealizedProfit = asset.amount * coin.price - asset.amount * asset.price
-            // Хранит сумму прибыли, которую ты уже получил при прошлых продажах
-            const realizedProfit = asset.realizedProfit || 0
-
-            return {
-                ...asset,
-                grow: asset.price < coin.price,
-                growPercent: percentDifference(asset.price, coin.price),
-                totalAmount: asset.amount * coin.price,
-                totalProfit: realizedProfit + unrealizedProfit,
-                realizedProfit,
-                unrealizedProfit,
-                name: coin.name,
-            }
-        })
-    }
-
-    useEffect(() => {
-        localStorage.setItem("myCryptoAssets", JSON.stringify(assets))
-    }, [assets])
+    const [loading, setLoading] = useState(false);
+    const [crypto, setCrypto] = useState([]);
+    const [assets, setAssets] = useState([]);
 
     useEffect(() => {
         async function preload() {
-            setLoading(true)
+            setLoading(true);
+            const { result } = await fakeFetchCrypto();
+            setCrypto(result);
 
-            // 3) Сначала получаем курсы
-            const { result } = await fakeFetchCrypto()
-            setCrypto(result)
-
-            // 4) Если портфель из localStorage пустой — грузим дефолт и мапим
-            if (assets.length === 0) {
-                const defaultAssets = await fetchAssets()
-                setAssets(mapAssets(defaultAssets, result))
+            const storedAssets = repository.getAll();
+            if (storedAssets.length === 0) {
+                const defaultAssets = await fetchAssets();
+                setAssets(service.mapAssets(defaultAssets, result));
             } else {
-                // 5) Если портфель есть в localStorage — просто обновляем цены для него
-                setAssets((prev) => mapAssets(prev, result))
+                setAssets(service.mapAssets(storedAssets, result));
             }
 
-            setLoading(false)
+            setLoading(false);
         }
-        preload()
-    }, [])
+        preload();
+    }, []);
 
-    // useEffect(() => {
-    //     async function preload() {
-    //         setLoading(true)
-    //         const { result } = await fakeFetchCrypto()
-    //         const assets = await fetchAssets()
-
-    //         setAssets(mapAssets(assets, result))
-    //         setCrypto(result)
-    //         setLoading(false)
-    //     }
-    //     preload()
-    // }, [])
-
-    // Добавить актив в портфель
     function addAsset(newAsset) {
-        setAssets((prev) => {
-            const existingIndex = prev.findIndex((asset) => asset.id === newAsset.id)
-
-            if (existingIndex !== -1) {
-                // Существующий актив
-                const existing = prev[existingIndex]
-                const totalAmount = existing.amount + newAsset.amount
-                const averagePrice =
-                    (existing.amount * existing.price + newAsset.amount * newAsset.price) / totalAmount
-                const updatedAsset = {
-                    ...existing,
-                    amount: totalAmount,
-                    price: averagePrice,
-                }
-                const newAssets = [...prev]
-                newAssets[existingIndex] = updatedAsset
-
-                return mapAssets(newAssets, crypto)
-            } else {
-                // Новый актив
-                return mapAssets([...prev, newAsset], crypto)
-            }
-        })
+        setAssets(service.addAsset(newAsset, crypto));
     }
 
     function sellAsset(soldAsset) {
-        setAssets((prev) => {
-            const assetIndex = prev.findIndex((a) => a.id === soldAsset.id)
-
-            if (assetIndex === -1) {
-                console.warn(`Trying to sell non-existing asset ${prev[soldAsset.id]}`)
-                return
-            }
-
-            const existing = prev[assetIndex]
-            if (soldAsset.amount > existing.amount) {
-                console.warn(`Trying to sell more than owned for ${soldAsset.id}`)
-                return
-            }
-
-            // Реализованная прибыль по этой продаже
-            const realized = soldAsset.amount * (soldAsset.price - existing.price)
-            const newAmount = existing.amount - soldAsset.amount
-
-            let newAssets
-            if (newAmount === 0) {
-                newAssets = prev.filter((_, i) => i !== assetIndex)
-            } else {
-                const updated = {
-                    ...existing,
-                    amount: newAmount,
-                    realizedProfit: (existing.realizedProfit || 0) + realized,
-                }
-                newAssets = [...prev]
-                newAssets[assetIndex] = updated
-            }
-
-            return mapAssets(newAssets, crypto)
-        })
+        setAssets(service.sellAsset(soldAsset, crypto));
     }
 
     function uploadAssets(file) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            const text = e.target.result
-            try {
-                const json = JSON.parse(text)
-                // валидация…
-                setAssets(mapAssets(json, crypto))
-                message.success("Данные загружены из файла")
-            } catch (err) {
-                console.error("❌ JSON.parse error:", err)
-                message.error("Ошибка чтения JSON-файла: " + err.message)
-            }
-        }
-        reader.readAsText(file)
-        return false
+        service.uploadAssets(file, crypto)
+            .then((newAssets) => {
+                setAssets(newAssets);
+                message.success('The data is downloaded from a file');
+            })
+            .catch((err) => {
+                message.error('Error reading the JSON file: ' + err.message);
+            });
     }
 
     return (
-        <CryptoContext.Provider value={{ loading, crypto, assets, uploadAssets, addAsset, sellAsset }}>
+        <CryptoContext.Provider value={{ loading, crypto, assets, addAsset, sellAsset, uploadAssets }}>
             {children}
         </CryptoContext.Provider>
-    )
+    );
 }
 
 export default CryptoContext
-
-export function useCrypto() {
-    return useContext(CryptoContext)
-}

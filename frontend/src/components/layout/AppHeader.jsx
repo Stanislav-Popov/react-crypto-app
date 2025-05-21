@@ -4,7 +4,7 @@ import { useCrypto } from "../../context/crypto-context"
 import { Layout, Select, Space, Button, Modal, Drawer, Tooltip, Upload, message } from "antd"
 import AddAssetForm from "../AddAssetForm"
 import CoinInfoModal from "../CoinInfoModal"
-import { downloadAssetsAsJson } from "../../utils"
+import { downloadAssetsAsJson } from "../../utils/utils"
 
 const headerStyle = {
     width: "100%",

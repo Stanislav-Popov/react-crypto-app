@@ -6,7 +6,7 @@ import {
     InfoCircleOutlined,
     MinusCircleOutlined,
 } from "@ant-design/icons"
-import { capitalize } from "../../utils"
+import { capitalize } from "../../utils/utils"
 import { useContext, useState } from "react"
 import CoinInfoModal from "../CoinInfoModal"
 import CryptoContext from "../../context/crypto-context"
